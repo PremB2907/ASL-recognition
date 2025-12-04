@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Vision Stream</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at top, #0b2b4a 0, #020817 55%, #000 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        header {
+            padding: 20px 24px 10px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: clamp(1.9rem, 3vw, 2.6rem);
+            letter-spacing: 0.03em;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            color: #cbd5f5;
+            font-size: 0.95rem;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            padding: 10px 18px 20px;
+            justify-content: center;
+        }
+
+        .card {
+            background: rgba(15,23,42,0.96);
+            border-radius: 16px;
+            box-shadow: 0 14px 35px rgba(15,23,42,0.8);
+            padding: 18px 18px 16px;
+            flex: 1 1 360px;
+            max-width: 520px;
+            border: 1px solid rgba(148,163,184,0.25);
+            backdrop-filter: blur(18px);
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #e5e7eb;
+        }
+
+        .badge {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(59,130,246,0.1);
+            border: 1px solid rgba(59,130,246,0.4);
+            color: #bfdbfe;
+        }
+
+        .video-wrapper {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #020617;
+            border: 1px solid rgba(148,163,184,0.4);
+        }
+
+        .video-feed {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1); /* mirror for natural feel */
+        }
+
+        .overlay-label {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.85);
+            border: 1px solid rgba(148,163,184,0.7);
+            font-size: 0.8rem;
+            color: #e5e7eb;
+        }
+
+        .current-prediction {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #cbd5f5;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 120px;
+            border: none;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.15s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+            color: #ecfeff;
+            box-shadow: 0 12px 25px rgba(37,99,235,0.55);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 35px rgba(37,99,235,0.7);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            color: #fee2e2;
+            box-shadow: 0 10px 24px rgba(248,113,113,0.5);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 32px rgba(248,113,113,0.6);
+        }
+
+        .btn-ghost {
+            background: rgba(15,23,42,0.35);
+            color: #e5e7eb;
+            border: 1px solid rgba(148,163,184,0.5);
+            box-shadow: 0 8px 18px rgba(15,23,42,0.7);
+        }
+
+        .btn-ghost:hover {
+            background: rgba(15,23,42,0.6);
+        }
+
+        .text-output {
+            min-height: 220px;
+            max-height: 280px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(148,163,184,0.5);
+            background: radial-gradient(circle at top left, rgba(30,64,175,0.25), rgba(15,23,42,0.95));
+            font-size: 1.05rem;
+            line-height: 1.7;
+            color: #e5e7eb;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .hint {
+            margin-top: 8px;
+            font-size: 0.78rem;
+            color: #9ca3af;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            background: rgba(15,23,42,0.75);
+            border: 1px solid rgba(148,163,184,0.6);
+            color: #e5e7eb;
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.78rem;
+            color: #64748b;
+            padding: 4px 0 10px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 8px 12px 18px;
+            }
+            .card {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ASL Vision Stream</h1>
+        <p>Real-time sign language prediction using deep learning & hand tracking</p>
+    </header>
+
+    <div class="container">
+        <!-- Camera & controls -->
+        <div class="card">
+            <h2>
+                Live Camera
+                <span class="badge">Real-time</span>
+            </h2>
+
+            <div class="video-wrapper">
+                <video id="cameraFeed" class="video-feed" autoplay playsinline></video>
+                <div class="overlay-label">
+                    <span id="camStatusText">Camera idle</span>
+                </div>
+            </div>
+
+            <div class="current-prediction">
+                <div>Letter: <strong id="currentLetter">–</strong></div>
+                <div>Confidence: <strong id="currentConf">–</strong></div>
+            </div>
+
+            <div class="controls">
+                <button class="btn btn-primary" onclick="startCamera()">
+                    ▶ Start camera
+                </button>
+                <button class="btn btn-danger" onclick="stopCamera()">
+                    ■ Stop
+                </button>
+            </div>
+
+            <p class="hint">
+                Hold a single hand sign steady in front of the camera.  
+                Letters are added to the word when the same sign stays stable for a short time.
+            </p>
+        </div>
+
+        <!-- Text output -->
+        <div class="card">
+            <h2>
+                Recognized Text
+                <span class="status-pill">
+                    <span id="streamStatusDot" style="width:8px;height:8px;border-radius:999px;background:#9ca3af;display:inline-block;"></span>
+                    <span id="streamStatus">Stream idle</span>
+                </span>
+            </h2>
+
+            <div id="textOutput" class="text-output"></div>
+
+            <div class="controls" style="margin-top: 14px;">
+                <button class="btn btn-ghost" onclick="clearText()">Clear text</button>
+            </div>
+
+            <p class="hint">
+                Backend endpoints used:
+                <code>/process_frame</code>,
+                <code>/get_text</code>,
+                <code>/clear_text</code>
+            </p>
+        </div>
+    </div>
+
+    <canvas id="hiddenCanvas" width="640" height="480" style="display:none;"></canvas>
+
+    <footer>
+        ASL Vision Stream • Powered by Python, TensorFlow, OpenCV & cvzone
+    </footer>
+
+    <script>
+        let stream = null;
+        let isProcessing = false;
+
+        const videoEl = document.getElementById('cameraFeed');
+        const canvasEl = document.getElementById('hiddenCanvas');
+        const ctx = canvasEl.getContext('2d');
+        const textOutput = document.getElementById('textOutput');
+        const camStatusText = document.getElementById('camStatusText');
+        const streamStatus = document.getElementById('streamStatus');
+        const streamStatusDot = document.getElementById('streamStatusDot');
+        const currentLetterEl = document.getElementById('currentLetter');
+        const currentConfEl = document.getElementById('currentConf');
+
+        function setStreamStatus(active) {
+            if (active) {
+                streamStatus.textContent = 'Streaming to model';
+                streamStatusDot.style.background = '#22c55e';
+            } else {
+                streamStatus.textContent = 'Stream idle';
+                streamStatusDot.style.background = '#9ca3af';
+            }
+        }
+
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        width: 640,
+                        height: 480,
+                        facingMode: 'user'
+                    }
+                };
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoEl.srcObject = stream;
+                camStatusText.textContent = 'Camera active';
+                isProcessing = true;
+
+                videoEl.onloadedmetadata = () => {
+                    videoEl.play();
+                    setStreamStatus(true);
+                    requestAnimationFrame(processLoop);
+                };
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                alert('Could not access the camera. Check permissions.');
+                camStatusText.textContent = 'Camera error';
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(t => t.stop());
+                stream = null;
+            }
+            videoEl.srcObject = null;
+            isProcessing = false;
+            camStatusText.textContent = 'Camera stopped';
+            setStreamStatus(false);
+        }
+
+        async function processLoop() {
+            if (!isProcessing || !stream) {
+                setStreamStatus(false);
+                return;
+            }
+
+            try {
+                // draw current frame to hidden canvas
+                ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+                const frameData = canvasEl.toDataURL('image/jpeg');
+
+                const res = await fetch('/process_frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ frame: frameData })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // update letter + confidence if available
+                    if (data.letter) {
+                        currentLetterEl.textContent = data.letter;
+                    } else {
+                        currentLetterEl.textContent = '–';
+                    }
+                    if (typeof data.confidence === 'number') {
+                        currentConfEl.textContent = (data.confidence * 100).toFixed(1) + '%';
+                    } else {
+                        currentConfEl.textContent = '–';
+                    }
+
+                    // update accumulated word
+                    if (data.word !== undefined) {
+                        textOutput.textContent = data.word;
+                    } else {
+                        updateTextFromServer();
+                    }
+                }
+            } catch (err) {
+                console.error('Error in processLoop:', err);
+            }
+
+            if (isProcessing) {
+                requestAnimationFrame(processLoop);
+            }
+        }
+
+        async function updateTextFromServer() {
+            try {
+                const res = await fetch('/get_text');
+                const data = await res.json();
+                textOutput.textContent = data.text || '';
+            } catch (err) {
+                console.error('Error fetching text:', err);
+            }
+        }
+
+        async function clearText() {
+            try {
+                const res = await fetch('/clear_text');
+                const data = await res.json();
+                if (data.success) {
+                    textOutput.textContent = '';
+                }
+            } catch (err) {
+                console.error('Error clearing text:', err);
+            }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            stopCamera();
+        });
+
+        videoEl.addEventListener('error', () => {
+            camStatusText.textContent = 'Camera error';
+        });
+    </script>
+</body>
+</html>

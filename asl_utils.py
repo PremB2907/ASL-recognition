@@ -1,4 +1,23 @@
 import os
+import sys
+import glob
+
+# Dynamically bind NVIDIA CUDA & cuDNN pip package libraries to LD_LIBRARY_PATH and XLA_FLAGS
+try:
+    venv_site_packages = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "lib", f"python{sys.version_info.major}.{sys.version_info.minor}", "site-packages")
+    nvidia_dirs = glob.glob(os.path.join(venv_site_packages, "nvidia", "*", "lib"))
+    if nvidia_dirs:
+        curr_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        new_ld = ":".join(nvidia_dirs + ([curr_ld] if curr_ld else []))
+        os.environ["LD_LIBRARY_PATH"] = new_ld
+
+    # Point XLA compiler to libdevice.10.bc for NVIDIA GPU JIT kernel execution
+    nvcc_dir = os.path.join(venv_site_packages, "nvidia", "cuda_nvcc")
+    if os.path.exists(nvcc_dir):
+        os.environ["XLA_FLAGS"] = f"--xla_gpu_cuda_data_dir={nvcc_dir}"
+except Exception:
+    pass
+
 import json
 import math
 import cv2
@@ -133,6 +152,13 @@ class FastPredictor:
         self.model = load_model(model_path)
         self.idx_to_label, self.label_to_idx = load_label_mapping(data_dir, labels_path)
 
+        # Check GPU availability
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            print(f"[asl_utils] GPU Acceleration ACTIVE: {gpus}")
+        else:
+            print("[asl_utils] Running on CPU.")
+
         # Create tf.function for fast forward pass execution without graph overhead
         @tf.function(experimental_relax_shapes=True)
         def _predict_fn(x):
@@ -158,8 +184,11 @@ class FastPredictor:
         if img_white is None:
             return None, 0.0, 0.0, None
 
+        # Convert OpenCV BGR to RGB to match ImageDataGenerator training color space
+        img_rgb = cv2.cvtColor(img_white, cv2.COLOR_BGR2RGB)
+
         # Normalize to [0, 1] float32 array
-        norm_img = (img_white.astype(np.float32) / 255.0)[np.newaxis, ...]
+        norm_img = (img_rgb.astype(np.float32) / 255.0)[np.newaxis, ...]
         
         probs_tensor = self._predict_fn(norm_img)
         probs = probs_tensor.numpy()[0]

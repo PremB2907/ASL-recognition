@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Vision Stream | Real-Time Sign Language AI</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-dark: #070913;
+            --card-bg: rgba(15, 23, 42, 0.75);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-green: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glow-cyan: rgba(6, 182, 212, 0.35);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at 50% 0%, #0f172a 0%, #070913 70%, #02040a 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Ambient Glow Spheres */
+        .ambient-glow {
+            position: fixed;
+            width: 450px;
+            height: 450px;
+            border-radius: 50%;
+            filter: blur(120px);
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
+        .glow-1 { top: -100px; left: -100px; background: var(--accent-blue); }
+        .glow-2 { top: 40%; right: -150px; background: var(--accent-purple); }
+
+        /* Header */
+        header {
+            position: relative;
+            z-index: 10;
+            padding: 24px 32px 12px;
+            text-align: center;
+        }
+
+        header .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        header h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: clamp(2rem, 3.5vw, 2.8rem);
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #67e8f9 50%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Main Grid */
+        .app-container {
+            position: relative;
+            z-index: 10;
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 24px;
+            padding: 16px 32px 32px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Glassmorphic Card */
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(6, 182, 212, 0.3);
+            box-shadow: 0 20px 50px rgba(6, 182, 212, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.4);
+            color: #67e8f9;
+        }
+
+        /* Video Wrapper */
+        .video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #020617;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8);
+        }
+
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+
+        .status-tag {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            font-size: 0.82rem;
+            font-weight: 500;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #64748b;
+            transition: background 0.3s ease;
+        }
+
+        .pulse-dot.active {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        /* Prediction Display Panel */
+        .prediction-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: rgba(2, 6, 23, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 12px 16px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        /* Confidence Meter */
+        .meter-container {
+            margin-bottom: 16px;
+        }
+
+        .meter-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .meter-bar-bg {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .meter-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 999px;
+            transition: width 0.2s ease;
+        }
+
+        /* Recognized Text Output Box */
+        .text-display-box {
+            flex: 1;
+            min-height: 200px;
+            background: rgba(2, 6, 23, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px;
+            font-size: 1.25rem;
+            line-height: 1.6;
+            color: #f1f5f9;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .text-placeholder {
+            color: #475569;
+            font-style: italic;
+            font-size: 1rem;
+        }
+
+        /* Buttons & Controls */
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 110px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: none;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            color: #ffffff;
+            box-shadow: 0 10px 25px rgba(6, 182, 212, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 30px rgba(6, 182, 212, 0.45);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 12px 20px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid var(--accent-cyan);
+            color: var(--text-main);
+            font-size: 0.9rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        footer {
+            text-align: center;
+            padding: 16px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            z-index: 10;
+        }
+
+        /* Hidden processing canvas */
+        #processingCanvas { display: none; }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <header>
+        <div class="brand">
+            <span style="font-size: 2.2rem;">🤟</span>
+            <h1>ASL Vision Stream</h1>
+        </div>
+        <p>Real-time American Sign Language recognition powered by Deep Learning & Computer Vision</p>
+    </header>
+
+    <main class="app-container">
+        <!-- Live Camera Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span>📷 Camera Feed</span>
+                </div>
+                <span class="badge" id="modelStatusBadge">Model Ready</span>
+            </div>
+
+            <div class="video-container">
+                <video id="webcam" class="video-feed" autoplay playsinline muted></video>
+                <canvas id="overlayCanvas" class="canvas-overlay"></canvas>
+                <div class="status-tag">
+                    <div class="pulse-dot" id="statusDot"></div>
+                    <span id="statusText">Camera Idle</span>
+                </div>
+            </div>
+
+            <div class="prediction-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Recognized Sign</div>
+                    <div class="stat-value" id="letterVal">–</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Confidence Gap</div>
+                    <div class="stat-value" id="marginVal" style="color: var(--accent-purple);">–</div>
+                </div>
+            </div>
+
+            <div class="meter-container">
+                <div class="meter-label">
+                    <span>Model Confidence</span>
+                    <span id="confPercent">0%</span>
+                </div>
+                <div class="meter-bar-bg">
+                    <div class="meter-bar-fill" id="confBar"></div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" id="startBtn" onclick="toggleCamera()">
+                    ▶ Start Stream
+                </button>
+            </div>
+        </div>
+
+        <!-- Recognized Output Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    <span>📝 Recognized Sentence</span>
+                </div>
+                <span class="badge" id="fpsBadge">FPS: 0</span>
+            </div>
+
+            <div class="text-display-box" id="textOutput">
+                <span class="text-placeholder">Recognized sign language characters will assemble into words here in real time...</span>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-secondary" onclick="addSpace()">␣ Space</button>
+                <button class="btn btn-secondary" onclick="backspace()">⌫ Backspace</button>
+                <button class="btn btn-secondary" onclick="speakText()">🔊 Speak</button>
+                <button class="btn btn-secondary" onclick="copyText()">📋 Copy</button>
+                <button class="btn btn-danger" onclick="clearText()">🗑 Clear</button>
+            </div>
+        </div>
+    </main>
+
+    <canvas id="processingCanvas" width="640" height="480"></canvas>
+    <div class="toast" id="toast">Copied to clipboard!</div>
+
+    <footer>
+        ASL Recognition System • Optimized with MobileNetV2 & Fast TensorFlow Inference
+    </footer>
+
+    <script>
+        let isStreaming = false;
+        let isSendingFrame = false;
+        let webcamStream = null;
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+
+        const video = document.getElementById('webcam');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+        const procCanvas = document.getElementById('processingCanvas');
+        const procCtx = procCanvas.getContext('2d');
+
+        const letterVal = document.getElementById('letterVal');
+        const marginVal = document.getElementById('marginVal');
+        const confPercent = document.getElementById('confPercent');
+        const confBar = document.getElementById('confBar');
+        const textOutput = document.getElementById('textOutput');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const startBtn = document.getElementById('startBtn');
+        const fpsBadge = document.getElementById('fpsBadge');
+        const toast = document.getElementById('toast');
+
+        async function toggleCamera() {
+            if (isStreaming) {
+                stopCamera();
+            } else {
+                await startCamera();
+            }
+        }
+
+        async function startCamera() {
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+                    audio: false
+                });
+                video.srcObject = webcamStream;
+                await video.play();
+
+                overlayCanvas.width = video.videoWidth || 640;
+                overlayCanvas.height = video.videoHeight || 480;
+
+                isStreaming = true;
+                statusDot.classList.add('active');
+                statusText.textContent = 'Live Processing';
+                startBtn.textContent = '■ Stop Stream';
+                startBtn.className = 'btn btn-danger';
+
+                requestAnimationFrame(streamLoop);
+            } catch (err) {
+                console.error('Camera access error:', err);
+                showToast('Camera error: ' + err.message);
+                statusText.textContent = 'Camera Denied';
+            }
+        }
+
+        function stopCamera() {
+            isStreaming = false;
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(t => t.stop());
+                webcamStream = null;
+            }
+            video.srcObject = null;
+            statusDot.classList.remove('active');
+            statusText.textContent = 'Camera Idle';
+            startBtn.textContent = '▶ Start Stream';
+            startBtn.className = 'btn btn-primary';
+            letterVal.textContent = '–';
+            confPercent.textContent = '0%';
+            confBar.style.width = '0%';
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
+
+        async function streamLoop() {
+            if (!isStreaming) return;
+
+            const now = performance.now();
+            frameCount++;
+            if (now - lastFrameTime >= 1000) {
+                fpsBadge.textContent = `FPS: ${frameCount}`;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+
+            if (!isSendingFrame && video.readyState === video.HAVE_ENOUGH_DATA) {
+                isSendingFrame = true;
+                try {
+                    // Render frame to canvas for JPEG extraction
+                    procCtx.drawImage(video, 0, 0, procCanvas.width, procCanvas.height);
+                    const frameData = procCanvas.toDataURL('image/jpeg', 0.75);
+
+                    const res = await fetch('/process_frame', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ frame: frameData })
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        updateUI(data);
+                    }
+                } catch (err) {
+                    console.error('Frame processing error:', err);
+                } finally {
+                    isSendingFrame = false;
+                }
+            }
+
+            if (isStreaming) {
+                setTimeout(() => requestAnimationFrame(streamLoop), 50); // ~15-20 FPS target
+            }
+        }
+
+        function updateUI(data) {
+            if (data.letter) {
+                letterVal.textContent = data.letter;
+            } else {
+                letterVal.textContent = '–';
+            }
+
+            const conf = Math.round((data.confidence || 0) * 100);
+            confPercent.textContent = conf + '%';
+            confBar.style.width = conf + '%';
+
+            if (data.margin !== undefined) {
+                marginVal.textContent = (data.margin * 100).toFixed(1) + '%';
+            }
+
+            if (data.word !== undefined && data.word !== "") {
+                textOutput.innerHTML = data.word;
+            } else {
+                textOutput.innerHTML = '<span class="text-placeholder">Recognized sign language characters will assemble into words here in real time...</span>';
+            }
+
+            // Draw bounding box overlay
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            if (data.hand_detected && data.bbox) {
+                const [x, y, w, h] = data.bbox;
+                overlayCtx.strokeStyle = conf > 70 ? '#06b6d4' : '#f59e0b';
+                overlayCtx.lineWidth = 3;
+                overlayCtx.strokeRect(x, y, w, h);
+            }
+        }
+
+        async function clearText() {
+            const res = await fetch('/clear_text', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                textOutput.innerHTML = '<span class="text-placeholder">Recognized sign language characters will assemble into words here in real time...</span>';
+            }
+        }
+
+        async function backspace() {
+            const res = await fetch('/backspace', { method: 'POST' });
+            const data = await res.json();
+            if (data.success && data.word) {
+                textOutput.innerText = data.word;
+            } else {
+                textOutput.innerHTML = '<span class="text-placeholder">Recognized sign language characters will assemble into words here in real time...</span>';
+            }
+        }
+
+        async function addSpace() {
+            const res = await fetch('/add_space', { method: 'POST' });
+            const data = await res.json();
+            if (data.success && data.word) {
+                textOutput.innerText = data.word;
+            }
+        }
+
+        function speakText() {
+            const text = textOutput.innerText;
+            if (text && text !== "Recognized sign language characters will assemble into words here in real time...") {
+                const utterance = new SpeechSynthesisUtterance(text);
+                speechSynthesis.speak(utterance);
+            } else {
+                showToast("No text to speak!");
+            }
+        }
+
+        function copyText() {
+            const text = textOutput.innerText;
+            if (text && text !== "Recognized sign language characters will assemble into words here in real time...") {
+                navigator.clipboard.writeText(text);
+                showToast("Copied to clipboard!");
+            } else {
+                showToast("Nothing to copy!");
+            }
+        }
+
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        // Fetch initial status
+        fetch('/status')
+            .then(res => res.json())
+            .then(data => {
+                const badge = document.getElementById('modelStatusBadge');
+                if (data.model_loaded) {
+                    badge.textContent = `Model Ready (${data.classes_count} classes)`;
+                } else {
+                    badge.textContent = 'Model Not Trained';
+                    badge.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                    badge.style.color = '#fca5a5';
+                }
+            })
+            .catch(() => {});
+    </script>
+</body>
+</html>
